@@ -1,0 +1,109 @@
+version: '3.8'
+services:
+  nginx:
+    build:
+      context: .
+    image: nginx:alpine
+    container_name: ${APP_NAME}-nginx
+    restart: unless-stopped
+    tty: true
+    volumes:
+      - ./docker-compose/nginx/templates:/etc/nginx/templates
+      - ./docker-compose/nginx/ouput:/etc/nginx/conf.d
+      - .:/var/www/html
+    environment:
+      - APP_NAME
+    labels:
+      - traefik.enable=true
+      - traefik.frontend.rule=Host:${APP_NAME}.test
+      - traefik.http.routers.${APP_NAME}-nginx.rule=Host(`${APP_NAME}.test`, `localhost`)
+      - traefik.http.routers.${APP_NAME}-nginx.entrypoints=https
+      - traefik.http.routers.${APP_NAME}-nginx.tls=true
+  traefik:
+    image: traefik:v2.5
+    container_name: traefik
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+    ports:
+      - "8080:8080"
+      - "80:80"
+      - "443:443"
+    volumes:
+     - ./traefik:/etc/traefik
+     - ./certs:/etc/certs:ro
+     - /var/run/docker.sock:/var/run/docker.sock
+  php:
+    build:
+      context: .
+      dockerfile: ./docker-compose/php/Dockerfile
+    image: php-fpm:8.2
+    container_name: ${APP_NAME}-php
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    command: ["/bin/bash", "-c", "php-fpm"]
+    ports:
+      - "9000:9000"
+    volumes:
+      - .:/var/www/html
+    working_dir: /var/www/html
+    environment:
+      - TERM=xterm-256color
+    depends_on:
+      - db
+  npm-install:
+    image: node:20.5
+    container_name: ${APP_NAME}-npm-install
+    working_dir: /var/www/html
+    entrypoint: ["npm"]
+    command: ["install"]
+    volumes:
+      - .:/var/www/html
+  npm:
+    image: node:20.5
+    container_name: ${APP_NAME}-npm
+    working_dir: /var/www/html
+    entrypoint: ["npm"]
+    command: ["run", "dev"]
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      npm-install:
+        condition: service_completed_successfully
+  redis:
+    image: redis:alpine
+    container_name: ${APP_NAME}-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+  mailhog:
+    image: mailhog/mailhog
+    container_name: ${APP_NAME}-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+  db:
+    image: mysql:8.0
+    container_name: ${APP_NAME}-db
+    restart: unless-stopped
+    tty: true
+    environment:
+      - MYSQL_DATABASE=${DB_DATABASE}
+      - MYSQL_USER=${DB_USERNAME}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./docker/mysql/data:/var/lib/mysql
+      - ./docker/volumes/mysql/seed:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+    command: --default-authentication-plugin=mysql_native_password
+networks:
+  default:
+    name: ${APP_NAME}-network
+volumes:
+  dbdata:

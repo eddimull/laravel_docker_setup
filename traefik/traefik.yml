@@ -1,0 +1,43 @@
+global:
+  sendAnonymousUsage: false
+
+api:
+  dashboard: true
+  insecure: false
+
+
+providers:
+  docker:
+    # endpoint: "unix:///var/run/docker.sock"
+    watch: true
+    exposedByDefault: true
+
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true
+serversTransport:
+  insecureSkipVerify: true
+log:
+  level: INFO
+  format: common
+
+entryPoints:
+  http:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: https
+          scheme: https
+  https:
+    address: ":443"
+    forwardedHeaders:
+      insecure: true
+  traefik:
+    address: ":8080"
+    http:
+      redirections:
+        entryPoint:
+          to: traefik
+          scheme: https
+  
